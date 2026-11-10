@@ -4,23 +4,23 @@ Les fichiers MP3 sont ensuite intégrés à l'appli : prononciation native, hors
 import asyncio, json, os, re, subprocess, sys
 import edge_tts
 
-# Une voix native par langue (et par pays pour les variantes)
+# Une voix native par langue (et par pays pour les variantes) + une voix native de secours
 VOICES = {
-    "en":   "en-GB-SoniaNeural",      # anglais britannique
-    "it":   "it-IT-ElsaNeural",       # italien d'Italie
-    "fr":   "fr-FR-DeniseNeural",     # français de France
-    "ro":   "ro-RO-AlinaNeural",      # roumain de Roumanie
-    "ptBR": "pt-BR-FranciscaNeural",  # portugais du Brésil
-    "ptPT": "pt-PT-RaquelNeural",     # portugais du Portugal
-    "esES": "es-ES-ElviraNeural",     # espagnol d'Espagne
-    "esMX": "es-MX-DaliaNeural",      # espagnol du Mexique
-    "esAR": "es-AR-ElenaNeural",      # espagnol d'Argentine
-    "de":   "de-DE-KatjaNeural",      # allemand d'Allemagne
-    "ru":   "ru-RU-SvetlanaNeural",   # russe
-    "el":   "el-GR-AthinaNeural",     # grec moderne
-    "nl":   "nl-NL-ColetteNeural",    # néerlandais
-    "ja":   "ja-JP-NanamiNeural",     # japonais
-    "zh":   "zh-CN-XiaoxiaoNeural",   # chinois mandarin
+    "en":   ["en-GB-SoniaNeural", "en-GB-LibbyNeural"],          # anglais britannique
+    "it":   ["it-IT-ElsaNeural", "it-IT-IsabellaNeural"],        # italien d'Italie
+    "fr":   ["fr-FR-DeniseNeural", "fr-FR-HenriNeural"],         # français de France
+    "ro":   ["ro-RO-AlinaNeural", "ro-RO-EmilNeural"],           # roumain de Roumanie
+    "ptBR": ["pt-BR-FranciscaNeural", "pt-BR-AntonioNeural"],    # portugais du Brésil
+    "ptPT": ["pt-PT-RaquelNeural", "pt-PT-DuarteNeural"],        # portugais du Portugal
+    "esES": ["es-ES-ElviraNeural", "es-ES-AlvaroNeural"],        # espagnol d'Espagne
+    "esMX": ["es-MX-DaliaNeural", "es-MX-JorgeNeural"],          # espagnol du Mexique
+    "esAR": ["es-AR-ElenaNeural", "es-AR-TomasNeural"],          # espagnol d'Argentine
+    "de":   ["de-DE-KatjaNeural", "de-DE-ConradNeural"],         # allemand d'Allemagne
+    "ru":   ["ru-RU-SvetlanaNeural", "ru-RU-DmitryNeural"],      # russe
+    "el":   ["el-GR-AthinaNeural", "el-GR-NestorasNeural"],      # grec moderne
+    "nl":   ["nl-NL-ColetteNeural", "nl-NL-MaartenNeural"],      # néerlandais
+    "ja":   ["ja-JP-NanamiNeural", "ja-JP-KeitaNeural"],         # japonais
+    "zh":   ["zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural"],       # chinois mandarin
 }
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,9 +55,10 @@ def spoken(t):
 
 async def main():
     voices = {v["ShortName"] for v in await edge_tts.list_voices()}
-    missing = [v for v in VOICES.values() if v not in voices]
-    if missing:
-        sys.exit("Voix introuvables : " + ", ".join(missing))
+    for lang in VOICES:   # on garde seulement les voix qui existent (toujours de la bonne langue)
+        VOICES[lang] = [v for v in VOICES[lang] if v in voices]
+        if not VOICES[lang]:
+            sys.exit("Aucune voix native trouvée pour " + lang)
     todo = jobs()
     sem = asyncio.Semaphore(8)
     errors = []
@@ -70,15 +71,16 @@ async def main():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         async with sem:
             for attempt in range(4):
+                voice = VOICES[lang][0 if attempt < 2 else -1]   # 3e essai : voix native de secours
                 try:   # 30 s maximum par enregistrement : une connexion bloquée ne fige plus tout
-                    await asyncio.wait_for(edge_tts.Communicate(spoken(text), VOICES[lang], rate="-10%").save(path), 30)
+                    await asyncio.wait_for(edge_tts.Communicate(spoken(text), voice, rate="-10%").save(path), 30)
                     if os.path.getsize(path) > 500:
                         done[0] += 1
                         if done[0] % 100 == 0:
                             print(f"{done[0]}/{len(todo)} enregistrements", flush=True)
                         return
                 except Exception as e:  # réseau : on réessaie
-                    print(f"nouvel essai {lang} « {text[:30]} » : {type(e).__name__}", flush=True)
+                    print(f"nouvel essai {lang} ({voice}) « {text[:30]} » : {type(e).__name__}", flush=True)
                 await asyncio.sleep(2 + attempt * 3)
             errors.append(f"{lang}: {text}")
 
@@ -89,7 +91,7 @@ async def main():
     json.dump(files, open(os.path.join(OUT, "list.json"), "w"))
     for lang, v in VOICES.items():
         n = len([1 for (l, _) in todo if l == lang])
-        print(f"{lang:5} {v:24} {n} fichiers")
+        print(f"{lang:5} {' / '.join(v):48} {n} fichiers")
     print("TOTAL", len(files), "fichiers audio natifs")
 
 asyncio.run(main())

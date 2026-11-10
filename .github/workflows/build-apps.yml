@@ -16,13 +16,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         with:
           path: www/audio
-          key: voix-${{ hashFiles('src/data.js', 'src/data2.js', 'scripts/make_audio.py') }}
+          key: voix-${{ github.run_id }}
           restore-keys: voix-
       - run: pip install edge-tts
       - run: python scripts/make_audio.py
+      - uses: actions/cache/save@v4      # on garde les enregistrements même si un essai échoue
+        if: always()
+        with:
+          path: www/audio
+          key: voix-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: actions/upload-artifact@v4
         with: { name: voix, path: www/audio }
 
