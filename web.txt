@@ -1,0 +1,7 @@
+OK web
+Voix natives intégrées : 1980 enregistrements
+BIBILEARN-Windows-Setup.exe -> HTTP 200
+BIBILEARN-Windows-portable.exe -> HTTP 200
+BIBILEARN-Linux.AppImage -> HTTP 200
+BIBILEARN-Linux.deb -> HTTP 200
+BIBILEARN-Android.apk -> HTTP 200
