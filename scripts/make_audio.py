@@ -59,21 +59,26 @@ async def main():
     if missing:
         sys.exit("Voix introuvables : " + ", ".join(missing))
     todo = jobs()
-    sem = asyncio.Semaphore(6)
+    sem = asyncio.Semaphore(8)
     errors = []
+    done = [0]
 
     async def one(lang, text, path):
         if os.path.exists(path) and os.path.getsize(path) > 500:
+            done[0] += 1
             return
         os.makedirs(os.path.dirname(path), exist_ok=True)
         async with sem:
             for attempt in range(4):
-                try:
-                    await edge_tts.Communicate(spoken(text), VOICES[lang], rate="-10%").save(path)
+                try:   # 30 s maximum par enregistrement : une connexion bloquée ne fige plus tout
+                    await asyncio.wait_for(edge_tts.Communicate(spoken(text), VOICES[lang], rate="-10%").save(path), 30)
                     if os.path.getsize(path) > 500:
+                        done[0] += 1
+                        if done[0] % 100 == 0:
+                            print(f"{done[0]}/{len(todo)} enregistrements", flush=True)
                         return
                 except Exception as e:  # réseau : on réessaie
-                    last = e
+                    print(f"nouvel essai {lang} « {text[:30]} » : {type(e).__name__}", flush=True)
                 await asyncio.sleep(2 + attempt * 3)
             errors.append(f"{lang}: {text}")
 
