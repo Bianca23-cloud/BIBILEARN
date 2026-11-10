@@ -1,0 +1,90 @@
+name: Construire les applications
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: python scripts/build.py
+      - run: npm install
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/BIBILEARN-Windows-Setup.exe
+            dist/BIBILEARN-Windows-portable.exe
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: python3 scripts/build.py
+      - run: npm install
+      - run: npm run dist:linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/BIBILEARN-Linux.AppImage
+            dist/BIBILEARN-Linux.deb
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: python3 scripts/build.py
+      - name: Installer Capacitor (+ voix natives Android)
+        run: npm install --no-save @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor-community/text-to-speech@latest
+      - run: npx cap add android
+      - name: Icône BIBILEARN
+        run: |
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          for d in android/app/src/main/res/mipmap-*dpi; do
+            cp www/icons/icon-192.png "$d/ic_launcher.png"
+            cp www/icons/icon-192.png "$d/ic_launcher_round.png"
+          done
+      - run: npx cap sync android
+      - name: Construire l'APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk BIBILEARN-Android.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: BIBILEARN-Android.apk }
+
+  release:
+    needs: [ windows, linux, android ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: files, merge-multiple: true }
+      - run: ls -la files
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: BIBILEARN 1.0.${{ github.run_number }}
+          make_latest: true
+          body: |
+            Téléchargements directs :
+            - Windows 11 (installation) : BIBILEARN-Windows-Setup.exe
+            - Windows 11 (sans installation) : BIBILEARN-Windows-portable.exe
+            - Linux : BIBILEARN-Linux.AppImage ou BIBILEARN-Linux.deb
+            - Android : BIBILEARN-Android.apk
+            - iPhone / iPad : https://bianca23-cloud.github.io/BIBILEARN/ (Safari → Partager → Sur l'écran d'accueil)
+          files: files/*

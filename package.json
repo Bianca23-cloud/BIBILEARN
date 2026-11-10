@@ -1,0 +1,29 @@
+{
+  "name": "bibilearn",
+  "version": "1.1.0",
+  "description": "BIBILEARN — application gratuite et hors ligne pour apprendre 15 langues à partir de n'importe laquelle d'entre elles.",
+  "main": "electron/main.js",
+  "author": { "name": "Bianca23-cloud", "email": "Bianca23-cloud@users.noreply.github.com" },
+  "homepage": "https://github.com/Bianca23-cloud/BIBILEARN",
+  "license": "MIT",
+  "scripts": {
+    "build:web": "python3 scripts/build.py",
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "io.github.bianca23cloud.bibilearn",
+    "productName": "BIBILEARN",
+    "files": ["electron/**", "www/**"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "target": ["nsis", "portable"], "icon": "build/icon.png" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "artifactName": "BIBILEARN-Windows-Setup.${ext}", "createDesktopShortcut": true },
+    "portable": { "artifactName": "BIBILEARN-Windows-portable.${ext}" },
+    "linux": { "target": ["AppImage", "deb"], "category": "Education", "icon": "build/icon.png", "artifactName": "BIBILEARN-Linux.${ext}", "synopsis": "Apprendre 15 langues hors ligne" }
+  }
+}
