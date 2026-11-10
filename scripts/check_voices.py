@@ -2,7 +2,14 @@
 on télécharge un enregistrement par langue depuis la version publiée et
 l'outil de reconnaissance Whisper détecte la langue entendue."""
 import json, os, subprocess, sys, urllib.request
+import numpy as np
 from faster_whisper import WhisperModel
+
+def load_audio(path):
+    """MP3 -> son 16 kHz mono (via ffmpeg), format attendu par Whisper."""
+    raw = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", path, "-f", "s16le", "-ac", "1", "-ar", "16000", "-"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, np.int16).astype(np.float32) / 32768.0
 
 WEB = os.environ.get("WEB", "https://bianca23-cloud.github.io/BIBILEARN/")
 EXPECTED = {"en":"en","it":"it","fr":"fr","ro":"ro","ptBR":"pt","ptPT":"pt","esES":"es","esMX":"es","esAR":"es",
@@ -27,7 +34,7 @@ for c, lang in enumerate(d["LANG_ORDER"]):
         url = f"{WEB}audio/{lang}/{fnv(lang + '|' + text)}.mp3"
         path = f"/tmp/{lang}_{k}.mp3"
         urllib.request.urlretrieve(url, path)
-        _, info = model.transcribe(path, beam_size=1)
+        _, info = model.transcribe(load_audio(path), beam_size=1)
         good = info.language == EXPECTED[lang]
         ok &= good
         lines.append(f"{'OK ' if good else 'ERREUR'} {lang:5} attendu={EXPECTED[lang]} entendu={info.language} ({info.language_probability:.0%}) « {text} »")
