@@ -40,6 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - run: pip install faster-whisper
       - name: Whisper vérifie que chaque langue est lue par une voix native de cette langue
         run: python scripts/check_voices.py
