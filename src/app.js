@@ -369,7 +369,7 @@ function profile(m){
    <div class="set"><label for="goal">${esc(t.goalSet)}</label><input type="number" id="goal" min="10" max="500" step="10" value="${S.goal}" style="width:100px"></div>
    <div class="row" style="margin-top:12px"><button class="btn alt" id="exp">⬇ ${esc(t.exp)}</button><label class="btn alt" for="imp" tabindex="0">⬆ ${esc(t.imp)}</label><input type="file" id="imp" accept="application/json" hidden><button class="btn warn" id="rst">🗑 ${esc(t.reset)}</button></div>
   </section>
-  <section class="card"><h2>🔊 ${esc(t.voices)}</h2><p class="rom">${esc(t.voicesHelp)}</p><table><tbody id="vt"></tbody></table><button class="btn alt" id="vtest">${esc(t.listenBtn)} — ${esc(langLabel(S.target))}</button></section>
+  <section class="card"><h2>🔊 ${esc(t.voices)}</h2><p class="rom">${esc(t.voicesHelp)}</p>${voicesCached ? `<p>📥 ${esc(t.offlineVoices)} : <b id="vc">${voicesCached.join(" / ")}</b></p>` : ""}<table><tbody id="vt"></tbody></table><button class="btn alt" id="vtest">${esc(t.listenBtn)} — ${esc(langLabel(S.target))}</button></section>
   <p class="rom">BIBILEARN 1.1 · ${esc(t.offline)} · Open source (MIT) · 0 pub · 0 compte · 0 donnée envoyée.</p>`;
   const fillV=()=>{ loadVoices(); const cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.TextToSpeech;
     $("#vt").innerHTML = LANG_ORDER.map(l=>{ let st;
@@ -396,5 +396,24 @@ document.addEventListener("keydown", e=>{ if(view==="lesson" && /^[1-4]$/.test(e
 const isApp = window.Capacitor || /Electron/.test(navigator.userAgent);
 if ("serviceWorker" in navigator && location.protocol.startsWith("http") && !isApp) navigator.serviceWorker.register("sw.js").catch(()=>{});
 go("home");
+/* Version web (iPhone, navigateurs) : on télécharge une fois toutes les voix natives dans le cache
+   pour qu'elles marchent ensuite en mode avion. (Windows, Linux, Android : déjà dans l'appli.) */
+let voicesCached = null;
+async function cacheVoices(){
+  if (isApp || !HAS_AUDIO || !("caches" in window) || !navigator.onLine) return;
+  try {
+    const c = await caches.open("bibilearn-v1.2");
+    const list = await (await fetch("audio/list.json")).json();
+    const have = new Set((await c.keys()).map(r=>r.url.split("/audio/")[1]).filter(Boolean));
+    const miss = list.filter(f=>!have.has(f.slice(6)));
+    voicesCached = [list.length - miss.length, list.length];
+    for (let i = 0; i < miss.length; i += 40){
+      await c.addAll(miss.slice(i, i+40));
+      voicesCached = [list.length - miss.length + Math.min(i+40, miss.length), list.length];
+      if (view === "profile" && $("#vc")) $("#vc").textContent = voicesCached.join(" / ");
+    }
+  } catch(e){}
+}
+setTimeout(cacheVoices, 1500);
 window.__BIBI = { S:()=>S, go, ITEMS, STORIES };
 })();
