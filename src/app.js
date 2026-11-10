@@ -402,7 +402,7 @@ let voicesCached = null;
 async function cacheVoices(){
   if (isApp || !HAS_AUDIO || !("caches" in window) || !navigator.onLine) return;
   try {
-    const c = await caches.open("bibilearn-v1.2");
+    const c = await caches.open("bibilearn-audio");
     const list = await (await fetch("audio/list.json")).json();
     const have = new Set((await c.keys()).map(r=>r.url.split("/audio/")[1]).filter(Boolean));
     const miss = list.filter(f=>!have.has(f.slice(6)));
