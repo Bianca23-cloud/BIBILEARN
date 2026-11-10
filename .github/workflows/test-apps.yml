@@ -23,12 +23,29 @@ jobs:
         run: |
           for i in 1 2 3 4 5 6; do curl -fsSL "$WEB" -o page.html && break; sleep 30; done
           grep -q "BIBILEARN" page.html && echo "OK web" > web.txt
+          n=$(curl -fsSL "${WEB}audio/list.json" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
+          echo "Voix natives intégrées : $n enregistrements" | tee -a web.txt
+          test "$n" -gt 1900
           for f in BIBILEARN-Windows-Setup.exe BIBILEARN-Windows-portable.exe BIBILEARN-Linux.AppImage BIBILEARN-Linux.deb BIBILEARN-Android.apk; do
             code=$(curl -sIL -o /dev/null -w "%{http_code}" "$REL/$f"); echo "$f -> HTTP $code" | tee -a web.txt
             test "$code" = "200"
           done
       - uses: actions/upload-artifact@v4
         with: { name: res-web, path: web.txt }
+
+  prononciation:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install faster-whisper
+      - name: Whisper vérifie que chaque langue est lue par une voix native de cette langue
+        run: python scripts/check_voices.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: res-voix, path: voix.txt }
 
   android:
     needs: web
@@ -98,7 +115,7 @@ jobs:
         with: { name: res-windows, path: "windows.*" }
 
   rapport:
-    needs: [ web, android, iphone, windows ]
+    needs: [ web, prononciation, android, iphone, windows ]
     if: ${{ always() && needs.web.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -110,7 +127,7 @@ jobs:
           {
             echo "# Vérification automatique de BIBILEARN"
             echo; echo "Date : $(date -u '+%Y-%m-%d %H:%M UTC') — run ${{ github.run_id }}"; echo
-            for t in web windows android iphone; do echo "## $t"; echo '```'; cat $t.txt 2>/dev/null || echo "ÉCHEC"; echo '```'; [ -f $t.png ] && echo "![$t]($t.png)"; echo; done
+            for t in web voix windows android iphone; do echo "## $t"; echo '```'; cat $t.txt 2>/dev/null || echo "ÉCHEC"; echo '```'; [ -f $t.png ] && echo "![$t]($t.png)"; echo; done
           } > README.md
           git init -q && git checkout -q -b verification
           git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

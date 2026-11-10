@@ -9,10 +9,30 @@ permissions:
   contents: write
 
 jobs:
+  # 1) Enregistrer chaque mot/phrase avec une VOIX NATIVE de chaque langue (gratuit, une seule fois grâce au cache)
+  voix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/cache@v4
+        with:
+          path: www/audio
+          key: voix-${{ hashFiles('src/data.js', 'src/data2.js', 'scripts/make_audio.py') }}
+          restore-keys: voix-
+      - run: pip install edge-tts
+      - run: python scripts/make_audio.py
+      - uses: actions/upload-artifact@v4
+        with: { name: voix, path: www/audio }
+
   windows:
+    needs: voix
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: voix, path: www/audio }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: python scripts/build.py
@@ -26,9 +46,12 @@ jobs:
             dist/BIBILEARN-Windows-portable.exe
 
   linux:
+    needs: voix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: voix, path: www/audio }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: python3 scripts/build.py
@@ -42,9 +65,12 @@ jobs:
             dist/BIBILEARN-Linux.deb
 
   android:
+    needs: voix
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: voix, path: www/audio }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: actions/setup-java@v4
@@ -68,19 +94,47 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: android, path: BIBILEARN-Android.apk }
 
+  # Version web (iPhone, iPad, tous navigateurs) avec les voix natives
+  web:
+    needs: voix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: voix, path: www/audio }
+      - run: python3 scripts/build.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: www }
+      - id: d
+        uses: actions/deploy-pages@v4
+
   release:
-    needs: [ windows, linux, android ]
+    needs: [ windows, linux, android, web ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
-        with: { path: files, merge-multiple: true }
+        with: { name: windows, path: files }
+      - uses: actions/download-artifact@v4
+        with: { name: linux, path: files }
+      - uses: actions/download-artifact@v4
+        with: { name: android, path: files }
       - run: ls -la files
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: BIBILEARN 1.0.${{ github.run_number }}
+          tag_name: v1.2.${{ github.run_number }}
+          name: BIBILEARN 1.2.${{ github.run_number }} — voix natives, niveaux A1 → C2
           make_latest: true
           body: |
+            Nouveautés : voix natives pour les 15 langues (intégrées, hors ligne), niveaux A1 Débutant → C2 Natif, grammaire, dictée, textes à trous, jeu d'association.
+
             Téléchargements directs :
             - Windows 11 (installation) : BIBILEARN-Windows-Setup.exe
             - Windows 11 (sans installation) : BIBILEARN-Windows-portable.exe

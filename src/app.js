@@ -18,35 +18,70 @@ const T = () => UI[S.ui] || UI.fr;
 
 /* ---------- Contenu ---------- */
 const col = l => LANG_ORDER.indexOf(l);
-function part(raw){ const [t, r] = String(raw).split("|"); return {t, r: r || ""}; }
-function word(i, l){ return part(ITEMS[i][2][col(l)]); }
-function sent(st, k, l){ return part(st.s[k][col(l)]); }
+/* Translittération automatique (russe, grec) quand la prononciation n'est pas écrite */
+const TR = {ru:{"а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ё":"yo","ж":"zh","з":"z","и":"i","й":"y","к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f","х":"kh","ц":"ts","ч":"ch","ш":"sh","щ":"shch","ъ":"","ы":"y","ь":"'","э":"e","ю":"yu","я":"ya"},
+ el:{"α":"a","ά":"á","β":"v","γ":"g","δ":"d","ε":"e","έ":"é","ζ":"z","η":"i","ή":"í","θ":"th","ι":"i","ί":"í","ϊ":"i","ΐ":"í","κ":"k","λ":"l","μ":"m","ν":"n","ξ":"x","ο":"o","ό":"ó","π":"p","ρ":"r","σ":"s","ς":"s","τ":"t","υ":"y","ύ":"ý","ϋ":"y","φ":"f","χ":"ch","ψ":"ps","ω":"o","ώ":"ó"}};
+function translit(t, l){ const m = TR[l]; if (l==="el") t = t.replace(/ου/g,"ou").replace(/ού/g,"oú").replace(/Ου/g,"Ou");
+  return [...t].map(ch=>{ const lo = ch.toLowerCase(), v = m[lo]; if (v===undefined) return ch; return (ch!==lo && v) ? v[0].toUpperCase()+v.slice(1) : v; }).join(""); }
+/* [crochets] = mot de grammaire à compléter (exercice « texte à trous ») */
+function part(raw, l){ const [x, r] = String(raw).split("|"); const t = x.replace(/[\[\]]/g,""); return {t, raw:x, r: r || (l && TR[l] ? translit(t, l) : "")}; }
+function word(i, l){ return part(ITEMS[i][2][col(l)], l); }
+function sent(st, k, l){ return part(st.s[k][col(l)], l); }
+function themeOf(id){ return THEMES.find(t=>t.id===id); }
 function themeName(th){ return th[S.ui] || th.fr; }
 function itemsOf(theme){ const a=[]; ITEMS.forEach((it,i)=>{ if(it[0]===theme) a.push(i); }); return a; }
 function lt(l, text, cls){ return `<span lang="${HTML_LANG[l]}" class="${cls||""}">${esc(text)}</span>`; }
 function romHtml(p){ return (S.rom && p.r) ? `<div class="rom">${esc(p.r)}</div>` : ""; }
 function langLabel(l){ const L = LANGS[l]; return `${L.flag} ${S.ui==="fr" ? L.name : L.native}`; }
 
-/* ---------- Audio (synthèse vocale native) ---------- */
+/* ---------- Audio : voix NATIVES enregistrées (1 voix par langue), puis voix de l'appareil ---------- */
+/* Chaque mot/phrase est enregistré à l'avance par une voix native de la langue (scripts/make_audio.py).
+   Fichier : audio/<langue>/<empreinte>.mp3 — intégré à l'appli, donc hors ligne. */
+function fnv(s){ let h = 0x811c9dc5; for (const b of new TextEncoder().encode(s)){ h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8,"0"); }
+const HAS_AUDIO = typeof AUDIO_N !== "undefined" && AUDIO_N > 0;
+let curAudio = null, seqId = 0;
+function stopAudio(){ seqId++; if (curAudio){ try { curAudio.pause(); } catch(e){} curAudio = null; } try { speechSynthesis.cancel(); } catch(e){} }
+function playClip(l, text){
+  return new Promise((ok, ko)=>{
+    const a = new Audio(`audio/${l}/${fnv(l+"|"+text)}.mp3`);
+    a.playbackRate = Math.max(.5, Math.min(1.5, S.rate/0.9));
+    a.onended = ()=>ok(); a.onerror = ()=>ko(new Error("clip"));
+    curAudio = a; const p = a.play(); if (p && p.catch) p.catch(ko);
+  });
+}
 let voices = [];
 function loadVoices(){ try { voices = speechSynthesis.getVoices() || []; } catch(e){ voices = []; } }
 if ("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+/* Voix de l'appareil : UNIQUEMENT une voix de la même langue (jamais une voix française pour lire de l'anglais) */
 function pickVoice(tag){
   const n = v => v.lang.replace("_","-").toLowerCase(), t = tag.toLowerCase(), p = t.split("-")[0];
   const alt = {"es-ar":["es-419","es-us","es-mx"],"es-mx":["es-419","es-us"],"pt-pt":["pt-br"],"en-gb":["en-au","en-us"]}[t] || [];
-  const loc = voices.filter(v=>v.localService!==false), pick = list => list.find(v=>n(v)===t) || alt.map(a=>list.find(v=>n(v)===a)).find(Boolean) || list.find(v=>n(v).startsWith(p));
-  return pick(loc) || pick(voices);
-  return voices.find(v=>n(v)===t) || alt.map(a=>voices.find(v=>n(v)===a)).find(Boolean) || voices.find(v=>n(v).startsWith(p));
+  const same = voices.filter(v=>n(v).split("-")[0]===p);
+  const pick = list => list.find(v=>n(v)===t) || alt.map(a=>list.find(v=>n(v)===a)).find(Boolean) || list[0];
+  return pick(same.filter(v=>v.localService!==false)) || pick(same) || null;
 }
-function speak(text, l){
+const warned = {};
+function noVoice(l){ if (!warned[l]){ warned[l] = 1; toast(T().noVoice); } }
+function deviceSpeak(text, l){
   const tag = LANGS[l].tts;
   const cap = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
-  if (cap){ cap.speak({text, lang:tag, rate:S.rate}).catch(()=>toast(T().noVoice)); return; }
-  if (!("speechSynthesis" in window)){ toast(T().noVoice); return; }
+  if (cap){ cap.speak({text, lang:tag, rate:S.rate}).catch(()=>noVoice(l)); return; }
+  if (!("speechSynthesis" in window)){ noVoice(l); return; }
   loadVoices();
-  const u = new SpeechSynthesisUtterance(text); u.lang = tag; u.rate = S.rate;
-  const v = pickVoice(tag); if (v) u.voice = v; else if (voices.length) toast(T().noVoice);
+  const v = pickVoice(tag);
+  if (!v){ noVoice(l); return; }          /* pas de voix de cette langue : on se tait plutôt que de mal prononcer */
+  const u = new SpeechSynthesisUtterance(text); u.lang = v.lang; u.voice = v; u.rate = S.rate;
   speechSynthesis.cancel(); speechSynthesis.speak(u);
+}
+function speak(text, l){
+  stopAudio();
+  if (HAS_AUDIO) playClip(l, text).catch(()=>deviceSpeak(text, l)); else deviceSpeak(text, l);
+}
+function speakSeq(list, l){
+  stopAudio(); const id = seqId; let i = 0;
+  const next = ()=>{ if (id !== seqId || i >= list.length) return; const tx = list[i++];
+    (HAS_AUDIO ? playClip(l, tx) : Promise.reject()).then(next).catch(()=>{ if (id===seqId) deviceSpeak(list.slice(i-1).join(" "), l); }); };
+  next();
 }
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 /* La reconnaissance vocale du navigateur passe par internet : on ne la propose qu'en ligne,
@@ -67,6 +102,11 @@ function similar(a,b){ a=norm(a); b=norm(b); if(!a||!b) return 0; return 1 - lev
 function toast(msg){ const d=document.createElement("div"); d.className="toast"; d.setAttribute("role","status"); d.textContent=msg; document.body.appendChild(d); setTimeout(()=>d.remove(),3200); }
 function today(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); }
 function levelOf(xp){ let k=0; LV.forEach((v,i)=>{ if(xp>=v) k=i; }); return k; }
+/* Niveau CECRL atteint : A1 Débutant → C2 Natif (60 % de réussite moyenne par niveau pour passer au suivant) */
+function levelStats(l){ const done = S.done[l] || {};
+  return LEVELS.map(L=>{ const th = THEMES.filter(t=>(t.level||"A1")===L.id); return Math.round(th.reduce((a,t)=>a+(done[t.id]||0),0)/Math.max(1,th.length)); }); }
+function levelIdx(l){ const st = levelStats(l); let k = 0; while (k < st.length && st[k] >= 60) k++; return Math.min(k, LEVELS.length-1); }
+function levelName(i){ const L = LEVELS[i]; return `${L.id} · ${L[S.ui]||L.fr}`; }
 
 /* ---------- Progression ---------- */
 function addXp(n){
@@ -119,10 +159,10 @@ function go(v, arg){
   window.scrollTo(0,0);
 }
 function home(m){
-  const t=T(), pct=Math.min(100, Math.round(S.dayXp*100/S.goal)), lx=S.xpBy[S.target]||0, lv=levelOf(lx);
+  const t=T(), pct=Math.min(100, Math.round(S.dayXp*100/S.goal)), lv=levelIdx(S.target);
   const nextTheme = THEMES.find(th=>!(S.done[S.target]||{})[th.id]) || THEMES[0];
   m.innerHTML = `<h1 class="sr">BIBILEARN</h1>
-  <section class="card hero">${BIBI}<div><b>${esc(t.tag)}</b><div>${esc(langLabel(S.target))} ← ${esc(langLabel(S.source))}</div><div class="tag">${esc(t.level)} : ${esc(t.lvl[lv])}</div></div></section>
+  <section class="card hero">${BIBI}<div><b>${esc(t.tag)}</b><div>${esc(langLabel(S.target))} ← ${esc(langLabel(S.source))}</div><div class="tag">${esc(t.level)} : ${esc(levelName(lv))}</div></div></section>
   <section class="card"><h2>${esc(t.goal)} — ${S.dayXp}/${S.goal} ${t.xp}</h2><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
   <p>🔥 ${S.streak} ${esc(t.streak)} · 📚 ${learnedCount(S.target)} ${esc(t.words)} · 🔁 ${dueList().length} ${esc(t.due)}</p>
   <div class="row"><button class="btn" id="cont">▶ ${esc(t.cont)} : ${nextTheme.icon} ${esc(themeName(nextTheme))}</button>
@@ -135,24 +175,31 @@ function home(m){
   if (deferredPrompt){ const b=$("#inst"); b.hidden=false; b.onclick=()=>{ deferredPrompt.prompt(); deferredPrompt=null; b.hidden=true; }; }
 }
 function lessons(m){
-  const t=T(), done=S.done[S.target]||{};
-  m.innerHTML = `<h1>${esc(t.lessons)} — ${esc(langLabel(S.target))}</h1><div class="grid">${THEMES.map(th=>{
-    const its=itemsOf(th.id), reg=its.filter(i=>ITEMS[i][1]).length;
-    return `<button class="tile" data-th="${th.id}"><span class="ic" aria-hidden="true">${th.icon}</span><b>${esc(themeName(th))}</b><small>${its.length} · ${reg} ${esc(t.regional)}${done[th.id]?" · ✅ "+done[th.id]+"%":""}</small></button>`;
-  }).join("")}</div>`;
+  const t=T(), done=S.done[S.target]||{}, st=levelStats(S.target), cur=levelIdx(S.target);
+  m.innerHTML = `<h1>${esc(t.lessons)} — ${esc(langLabel(S.target))}</h1>` + LEVELS.map((L,li)=>{
+    const ths = THEMES.filter(th=>(th.level||"A1")===L.id); if (!ths.length) return "";
+    return `<section class="card"><h2>${li<cur?"✅":li===cur?"▶":"⬜"} ${esc(levelName(li))} <span class="tag">${st[li]}%</span></h2>
+    <div class="bar" role="progressbar" aria-valuenow="${st[li]}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(levelName(li))}"><i style="width:${st[li]}%"></i></div>
+    <div class="grid" style="margin-top:12px">${ths.map(th=>{
+      const its=itemsOf(th.id), reg=its.filter(i=>ITEMS[i][1]).length;
+      return `<button class="tile" data-th="${th.id}"><span class="ic" aria-hidden="true">${th.icon}</span><b>${esc(themeName(th))}</b><small>${th.tip?"📘 "+esc(t.grammar)+" · ":""}${its.length}${reg?" · "+reg+" "+esc(t.regional):""}${done[th.id]?" · ✅ "+done[th.id]+"%":""}</small></button>`;
+    }).join("")}</div></section>`;
+  }).join("") + `<p class="rom">${esc(t.levelHelp)}</p>`;
   m.querySelectorAll(".tile").forEach(b=>b.onclick=()=>go("lesson", b.dataset.th));
 }
 
 /* ---------- Leçon : exercices variés ---------- */
 let L = null;
 function buildSteps(theme){
-  const its = shuffle(itemsOf(theme)), m = srsOf(S.target), steps = [];
+  const its = shuffle(itemsOf(theme)), m = srsOf(S.target), steps = [], th = themeOf(theme);
+  if (th && th.tip) steps.push({k:"tip", i:its[0]});
   its.forEach(i=>{
-    const multi = word(i,S.target).t.trim().split(/\s+/).length > 2 && !NO_SPACE[S.target];
+    const w = word(i,S.target), multi = w.t.trim().split(/\s+/).length > 2 && !NO_SPACE[S.target], gap = /\[.+?\]/.test(w.raw);
     if (!m[i]) steps.push({k:"intro", i});
-    const pool = ["s2t","t2s","listen"]; if (!NO_SPACE[S.target]) pool.push("type"); if (multi) pool.push("order","order"); if (canSpeakEx() && multi) pool.push("speak");
+    const pool = ["s2t","t2s","listen"]; if (!NO_SPACE[S.target]) pool.push("type","dict"); if (multi) pool.push("order","order"); if (gap) pool.push("cloze","cloze","cloze"); if (canSpeakEx() && multi) pool.push("speak");
     steps.push({k: pool[Math.floor(Math.random()*pool.length)], i});
   });
+  if (its.length >= 4) steps.push({k:"match", i:its[0]});
   return steps;
 }
 function startLesson(m, theme){ L = {theme, steps:buildSteps(theme), n:0, good:0, total:0, retry:new Set(), m}; step(); }
@@ -170,10 +217,47 @@ function shell(inner, label){
   $("#quit").onclick = () => go("lessons");
   const h=L.m.querySelector("h1"); h.setAttribute("tabindex","-1"); h.focus();
 }
+function wireOpts(set){ L.m.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{ L.m.querySelectorAll(".opt").forEach(x=>{x.classList.remove("sel");x.setAttribute("aria-checked","false");}); b.classList.add("sel"); b.setAttribute("aria-checked","true"); set(b.dataset.v); $("#go").disabled=false; }); }
+function markOpts(good, ans){ L.m.querySelectorAll(".opt").forEach(x=>{ x.disabled=true; if(x.dataset.v===good) x.classList.add("good"); else if(x.dataset.v===ans) x.classList.add("bad"); }); }
 function step(){
   if (L.n >= L.steps.length) return finish();
   const t=T(), s=L.steps[L.n], i=s.i, tw=word(i,S.target), sw=word(i,S.source), reg = ITEMS[i][1] ? ` <span class="tag">${esc(t.regional)} ${LANGS[S.target].flag}</span>` : "";
   let answer = null, check = null;
+  if (s.k==="tip"){
+    const th = themeOf(L.theme);
+    shell(`<p class="tag">📘 ${esc(t.grammar)}</p><p style="font-size:1.1rem">${esc(th.tip[S.ui]||th.tip.fr)}</p>`, themeName(th));
+    const g=$("#go"); g.disabled=false; g.textContent=t.next; g.onclick=()=>{ L.n++; step(); }; return;
+  }
+  if (s.k==="cloze"){
+    const ansW = tw.raw.match(/\[(.+?)\]/)[1], shown = tw.raw.replace(/\[.+?\]/, " ____ ").replace(/[\[\]]/g,"").replace(/\s+/g," ").trim();
+    const pool = new Set([ansW]);
+    shuffle(itemsOf(L.theme).concat(shuffle(ITEMS.map((_,k)=>k)))).forEach(k=>{ if (pool.size>=4) return; const r = word(k,S.target).raw.match(/\[(.+?)\]/); if (r && r[1]!==ansW) pool.add(r[1]); });
+    const ops = shuffle([...pool]);
+    shell(`<div class="q">${lt(S.target, shown)}</div><p>= ${lt(S.source, sw.t)}</p><div class="opts" role="radiogroup">${ops.map((o,k)=>`<button class="opt" role="radio" aria-checked="false" data-v="${esc(o)}" lang="${HTML_LANG[S.target]}">${k+1}. ${esc(o)}</button>`).join("")}</div>`, t.cloze);
+    wireOpts(v=>answer=v);
+    check = () => { markOpts(ansW, answer); return [answer===ansW, tw.t]; };
+  }
+  if (s.k==="dict"){
+    shell(`<div class="row"><button class="btn alt" id="say" style="font-size:1.4rem" aria-label="${esc(t.listenBtn)}">🔊</button><button class="btn alt" id="slow" aria-label="${esc(t.slow)}">🐢 ${esc(t.slow)}</button></div><label>${esc(t.typeHere)} (${esc(langLabel(S.target))})<br><input type="text" id="inp" lang="${HTML_LANG[S.target]}" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%"></label>`, t.dict);
+    $("#say").onclick=()=>speak(tw.t,S.target);
+    $("#slow").onclick=()=>{ const r=S.rate; S.rate=Math.max(.5,r-.35); speak(tw.t,S.target); S.rate=r; };
+    speak(tw.t,S.target);
+    const inp=$("#inp"); inp.oninput=()=>{$("#go").disabled=!inp.value.trim();}; inp.onkeydown=e=>{ if(e.key==="Enter" && inp.value.trim()) $("#go").click(); };
+    check = () => { const v=inp.value; inp.disabled=true; return [norm(v)===norm(tw.t) || (tw.r && norm(v)===norm(tw.r)), tw.t]; };
+  }
+  if (s.k==="match"){
+    const its = shuffle(itemsOf(L.theme)).slice(0,5), left = shuffle(its), right = shuffle(its); let selL=null, selR=null, found=0;
+    shell(`<p>${esc(t.matchHelp)}</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="opts" id="ml">${left.map(k=>`<button class="opt" data-k="${k}" lang="${HTML_LANG[S.target]}">${esc(word(k,S.target).t)}</button>`).join("")}</div><div class="opts" id="mr">${right.map(k=>`<button class="opt" data-k="${k}" lang="${HTML_LANG[S.source]}">${esc(word(k,S.source).t)}</button>`).join("")}</div></div>`, t.match);
+    const tryPair=()=>{ if (selL===null || selR===null) return;
+      const bl=L.m.querySelector(`#ml [data-k="${selL}"]`), br=L.m.querySelector(`#mr [data-k="${selR}"]`);
+      if (selL===selR){ bl.classList.add("good"); br.classList.add("good"); bl.disabled=br.disabled=true; found++; }
+      else { bl.classList.add("bad"); br.classList.add("bad"); setTimeout(()=>{ bl.classList.remove("bad"); br.classList.remove("bad"); }, 600); }
+      L.m.querySelectorAll(".opt.sel").forEach(x=>x.classList.remove("sel")); selL=selR=null;
+      if (found===its.length){ const g=$("#go"); g.disabled=false; g.focus(); } };
+    L.m.querySelectorAll("#ml .opt").forEach(b=>b.onclick=()=>{ L.m.querySelectorAll("#ml .opt").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); selL=b.dataset.k; speak(word(+selL,S.target).t,S.target); tryPair(); });
+    L.m.querySelectorAll("#mr .opt").forEach(b=>b.onclick=()=>{ L.m.querySelectorAll("#mr .opt").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); selR=b.dataset.k; tryPair(); });
+    check = () => [true, ""];
+  }
   if (s.k==="intro"){
     shell(`<p class="tag">${esc(t.newWord)}</p>${reg}<div class="q">${lt(S.target,tw.t)}</div>${romHtml(tw)}<p>= ${lt(S.source,sw.t)}</p><button class="btn alt" id="say">${esc(t.listenBtn)}</button>`, t.newWord);
     $("#say").onclick=()=>speak(tw.t,S.target); speak(tw.t,S.target);
@@ -222,7 +306,7 @@ function step(){
     if (ok){ L.good++; grade(i,true); addXp(2); } else { grade(i,false); if(!L.retry.has(i)){ L.retry.add(i); L.steps.push({k:"s2t", i}); } }
     $("#fb").className = "fb " + (ok?"good":"bad");
     $("#fb").innerHTML = ok ? `✅ ${esc(t.ok)}` : `❌ ${esc(t.ko)} ${lt(S.target,right)}`;
-    speak(tw.t, S.target);
+    if (s.k!=="match") speak(tw.t, S.target);
     g.textContent = t.next; g.dataset.st="next"; g.disabled=false; g.focus();
   };
 }
@@ -266,7 +350,7 @@ function openStory(m, id){
   <section class="card">${st.s.map((_,k)=>{ const p=sent(st,k,S.target); return `<button class="sent" data-k="${k}">${lt(S.target,p.t)}${S.rom&&p.r?`<span class="rom" style="display:block">${esc(p.r)}</span>`:""}<span class="tr" hidden></span></button>`; }).join("")}</section>
   <div class="row"><button class="btn" id="fin">✓ ${esc(t.finish)}</button><button class="btn alt" id="bk">${esc(t.stories)}</button></div>`;
   m.querySelectorAll(".sent").forEach(b=>b.onclick=()=>{ const k=+b.dataset.k, tr=b.querySelector(".tr"); tr.innerHTML=lt(S.source, sent(st,k,S.source).t); tr.hidden=false; speak(sent(st,k,S.target).t, S.target); });
-  $("#all").onclick=()=>speak(st.s.map((_,k)=>sent(st,k,S.target).t).join(" "), S.target);
+  $("#all").onclick=()=>speakSeq(st.s.map((_,k)=>sent(st,k,S.target).t), S.target);
   $("#fin").onclick=()=>{ const r=S.read[S.target]||(S.read[S.target]=[]); if(!r.includes(id)){ r.push(id); addXp(10); } save(); go("stories"); };
   $("#bk").onclick=()=>go("stories");
 }
@@ -274,9 +358,10 @@ function openStory(m, id){
 /* ---------- Profil & réglages ---------- */
 function profile(m){
   const t=T();
-  const rows = LANG_ORDER.filter(l=>S.xpBy[l]).map(l=>`<tr><td>${esc(langLabel(l))}</td><td>${S.xpBy[l]} ${t.xp}</td><td>${esc(t.lvl[levelOf(S.xpBy[l])])}</td><td>${learnedCount(l)}</td></tr>`).join("");
+  const rows = LANG_ORDER.filter(l=>S.xpBy[l]).map(l=>`<tr><td>${esc(langLabel(l))}</td><td>${S.xpBy[l]} ${t.xp}</td><td>${esc(levelName(levelIdx(l)))}</td><td>${learnedCount(l)}</td></tr>`).join("");
   m.innerHTML=`<h1>${esc(t.profile)}</h1>
   <section class="card"><h2>${esc(t.progress)}</h2>${rows?`<table><thead><tr><th>${esc(t.lang)}</th><th>${t.xp}</th><th>${esc(t.level)}</th><th>${esc(t.words)}</th></tr></thead><tbody>${rows}</tbody></table>`:`<p>—</p>`}</section>
+  <section class="card"><h2>🎓 ${esc(t.levels)} — ${esc(langLabel(S.target))}</h2><table><tbody>${levelStats(S.target).map((p,i)=>`<tr><td>${i<levelIdx(S.target)||p>=60?"✅":i===levelIdx(S.target)?"▶":"⬜"} ${esc(levelName(i))}</td><td style="width:45%"><div class="bar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(levelName(i))}"><i style="width:${p}%"></i></div></td><td>${p}%</td></tr>`).join("")}</tbody></table></section>
   <section class="card"><h2>${esc(t.settings)}</h2>
    <div class="set"><label for="ui">${esc(t.uiLang)}</label><select id="ui">${[["fr","🇫🇷 Français"],["ro","🇷🇴 Română"],["en","🇬🇧 English"],["it","🇮🇹 Italiano"]].map(([k,v])=>`<option value="${k}" ${k===S.ui?"selected":""}>${v}</option>`).join("")}</select></div>
    ${[["big",t.big],["contrast",t.contrast],["rom",t.rom],["acc",t.acc]].map(([k,v])=>`<div class="set"><label for="c_${k}">${esc(v)}</label><input type="checkbox" id="c_${k}" ${S[k]?"checked":""}></div>`).join("")}
@@ -288,7 +373,8 @@ function profile(m){
   <p class="rom">BIBILEARN 1.1 · ${esc(t.offline)} · Open source (MIT) · 0 pub · 0 compte · 0 donnée envoyée.</p>`;
   const fillV=()=>{ loadVoices(); const cap=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.TextToSpeech;
     $("#vt").innerHTML = LANG_ORDER.map(l=>{ let st;
-      if (cap) st = "📱 " + t.sysVoice;
+      if (HAS_AUDIO) st = "🎧 " + t.vNative;
+      else if (cap) st = "📱 " + t.sysVoice;
       else { const v=pickVoice(LANGS[l].tts); st = !v ? "⚠️ "+t.vNone : (v.localService===false ? "🌐 "+t.vOnline : "✅ "+t.vLocal); }
       return `<tr><td>${esc(langLabel(l))}</td><td>${esc(st)}</td></tr>`; }).join(""); };
   fillV(); if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged=()=>{ loadVoices(); fillV(); };
