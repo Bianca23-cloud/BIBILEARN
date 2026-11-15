@@ -1,0 +1,27 @@
+OK  appli chargée : 218 phrases, 34 thèmes, 6 histoires
+OK  translittération présente et en lettres latines pour 100 % des phrases russes, grecques, japonaises et chinoises
+OK  34 leçons terminées sans erreur : en ← fr
+OK  34 leçons terminées sans erreur : ja ← ro
+OK  34 leçons terminées sans erreur : ru ← en
+OK  34 leçons terminées sans erreur : zh ← fr
+OK  12 leçons terminées sans erreur : ptPT ← esAR
+OK  12 leçons terminées sans erreur : el ← de
+OK  12 leçons terminées sans erreur : esMX ← it
+OK  12 leçons terminées sans erreur : nl ← ptBR
+OK  exam : 🎓 Examen A1 : 100%
+OK  sprint : ⚡ Sprint 3 min : 46/46
+OK  placement : 🧭 Test de niveau
+OK  test de niveau réussi en entier → niveau C2 atteint
+OK  traducteur hors connexion : « Bonjour » → こんにちは + translittération « konnichiwa », voix native
+OK  inversion des langues d'entrée et de sortie (⇄) : ja → fr
+OK  deux micros : 1er en portugais du Portugal (pt-PT), 2e en anglais britannique (en-GB), traductions croisées affichées
+OK  micro de la langue d'entrée (dictée fr-FR) → traduction chinoise + pinyin
+OK  traduction en ligne réelle fr → ru : Подскажите, пожалуйста, где ближайшая железнодорожная станция?  [Podskazhite, pozhaluysta, gde blizhayshaya zheleznodorozhnaya stantsiya?]
+OK  traduction en ligne réelle fr → el : Πού είναι ο πλησιέστερος σιδηροδρομικός σταθμός παρακαλώ;  [Poú eínai o plisiésteros sidirodromikós stathmós parakaló?]
+OK  traduction en ligne réelle fr → ja : 最寄りの駅はどこですか？  [Moyori no eki wa dokodesu ka?]
+OK  traduction en ligne réelle fr → zh : 请问最近的火车站在哪里？  [Qǐngwèn zuìjìn de huǒchē zhàn zài nǎlǐ?]
+OK  traduction en ligne réelle fr → ptPT : Onde fica a estação de comboios mais próxima, por favor?
+OK  traduction en ligne réelle fr → esAR : ¿Dónde está la estación de tren más cercana, por favor?
+OK  texte libre en ligne : traduction + translittération affichées
+OK  hors ligne : traducteur → 📴 Hors ligne : seules les phrases du cours sont traduites.
+OK  hors ligne : leçon ouverte

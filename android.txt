@@ -1,0 +1,1 @@
+OK android SANS INTERNET (mode avion, processus ) — OK micro Android : permission RECORD_AUDIO + extensions SpeechRecognition et TextToSpeech présentes
