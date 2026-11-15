@@ -54,11 +54,17 @@ def spoken(t):
     return re.sub(r"\s+\([^)]*\)", "", t).strip()
 
 async def main():
-    voices = {v["ShortName"] for v in await edge_tts.list_voices()}
+    allv = await edge_tts.list_voices()
+    voices = {v["ShortName"] for v in allv}
     for lang in VOICES:   # on garde seulement les voix qui existent (toujours de la bonne langue)
-        VOICES[lang] = [v for v in VOICES[lang] if v in voices]
+        locale = VOICES[lang][0][:5]                       # ex. « de-DE »
+        keep = [v for v in VOICES[lang] if v in voices]
+        # Si Microsoft a retiré une voix prévue : autre voix native du MÊME pays (jamais une autre langue)
+        same = sorted(v["ShortName"] for v in allv if v["Locale"] == locale and v["ShortName"] not in keep)
+        VOICES[lang] = (keep + same)[:2]
         if not VOICES[lang]:
             sys.exit("Aucune voix native trouvée pour " + lang)
+        print(lang, "→", ", ".join(VOICES[lang]), flush=True)
     todo = jobs()
     sem = asyncio.Semaphore(8)
     errors = []
