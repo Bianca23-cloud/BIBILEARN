@@ -89,7 +89,7 @@ jobs:
         with: { distribution: temurin, java-version: 21 }
       - run: python3 scripts/build.py
       - name: Installer Capacitor (+ voix du téléphone + micro / reconnaissance vocale)
-        run: npm install --no-save --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor-community/text-to-speech@latest @capacitor-community/speech-recognition@latest
+        run: npm install --save --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor-community/text-to-speech@latest @capacitor-community/speech-recognition@latest
       - run: npx cap add android
       - name: Autoriser le micro (RECORD_AUDIO) et le service de reconnaissance vocale d'Android
         run: |
