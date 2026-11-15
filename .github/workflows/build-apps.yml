@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# Un nouvel envoi annule la fabrication précédente encore en cours (seule la dernière version compte)
+concurrency:
+  group: fabrication
+  cancel-in-progress: true
+
 jobs:
   # 1) Enregistrer chaque mot/phrase avec une VOIX NATIVE de chaque langue (gratuit, une seule fois grâce au cache)
   voix:
@@ -81,9 +86,18 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - run: python3 scripts/build.py
-      - name: Installer Capacitor (+ voix natives Android)
-        run: npm install --no-save @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor-community/text-to-speech@latest
+      - name: Installer Capacitor (+ voix du téléphone + micro / reconnaissance vocale)
+        run: npm install --no-save --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor-community/text-to-speech@latest @capacitor-community/speech-recognition@latest
       - run: npx cap add android
+      - name: Autoriser le micro (RECORD_AUDIO) et le service de reconnaissance vocale d'Android
+        run: |
+          python3 - <<'P'
+          p = "android/app/src/main/AndroidManifest.xml"; s = open(p).read()
+          if "RECORD_AUDIO" not in s:
+              s = s.replace("</manifest>", '    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <queries>\n        <intent>\n            <action android:name="android.speech.RecognitionService" />\n        </intent>\n    </queries>\n</manifest>')
+          open(p, "w").write(s)
+          P
+          grep -n "RECORD_AUDIO\|RecognitionService" android/app/src/main/AndroidManifest.xml
       - name: Icône BIBILEARN
         run: |
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
@@ -92,6 +106,8 @@ jobs:
             cp www/icons/icon-192.png "$d/ic_launcher_round.png"
           done
       - run: npx cap sync android
+      - name: Vérifier que les extensions voix + micro sont dans l'appli
+        run: cat android/app/src/main/assets/capacitor.plugins.json && grep -q SpeechRecognition android/app/src/main/assets/capacitor.plugins.json && grep -q TextToSpeech android/app/src/main/assets/capacitor.plugins.json
       - name: Construire l'APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
@@ -134,11 +150,11 @@ jobs:
       - run: ls -la files
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.${{ github.run_number }}
-          name: BIBILEARN 1.2.${{ github.run_number }} — voix natives, niveaux A1 → C2
+          tag_name: v2.0.${{ github.run_number }}
+          name: BIBILEARN 2.0.${{ github.run_number }} — traducteur 2 micros, niveaux A1 → C2 accélérés
           make_latest: true
           body: |
-            Nouveautés : voix natives pour les 15 langues (intégrées, hors ligne), niveaux A1 Débutant → C2 Natif, grammaire, dictée, textes à trous, jeu d'association.
+            Nouveautés 2.0 : traducteur (langue d'entrée ⇄ langue de sortie, deux micros, voix natives, translittération), 218 phrases et 34 thèmes de A1 à C2, test de niveau, examens de passage, sprint, rythme intensif. Installation Windows en un clic.
 
             Téléchargements directs :
             - Windows 11 (installation) : BIBILEARN-Windows-Setup.exe

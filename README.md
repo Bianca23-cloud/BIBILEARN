@@ -18,13 +18,22 @@ néerlandais, japonais, chinois mandarin.
 | Android | https://github.com/Bianca23-cloud/BIBILEARN/releases/latest/download/BIBILEARN-Android.apk |
 | iPhone / iPad / tout navigateur | https://bianca23-cloud.github.io/BIBILEARN/ |
 
+## Nouveautés 2.0
+
+- **Traducteur** : langue d'entrée ⇄ langue de sortie (15 langues), deux micros (conversation), voix natives, translittération.
+- **218 phrases, 34 thèmes, 6 histoires** de A1 Débutant à C2 Natif.
+- **Parcours accéléré** : test de niveau, examen de passage par niveau (80 %), sprint de 3 minutes, rythme intensif.
+- **Translittération** de 100 % des phrases en russe, grec, japonais (rōmaji) et chinois (pinyin).
+
 ## Structure
 
 ```
-src/        code source (data.js = contenu, i18n.js = interface, app.js = logique)
+src/data*.js   contenu (phrases en 15 langues, thèmes, histoires)
+src/i18n*.js   textes de l'interface (fr, ro, en, it)
+src/js/        code de l'appli, en modules numérotés (00-core … 99-start)
 www/        application assemblée (index.html unique, hors ligne)
 electron/   fenêtre de bureau (Windows, Linux)
-scripts/    build.py : assemble src/ → www/index.html
+scripts/    build.py (assemble), make_audio.py (voix natives), test_app.py (tests), check_voices.py (Whisper)
 .github/    fabrication automatique des applis + publication web
 ```
 

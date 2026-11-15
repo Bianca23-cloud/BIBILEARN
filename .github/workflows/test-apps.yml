@@ -22,10 +22,10 @@ jobs:
       - name: La version web répond et contient BIBILEARN
         run: |
           for i in 1 2 3 4 5 6; do curl -fsSL "$WEB" -o page.html && break; sleep 30; done
-          grep -q "BIBILEARN" page.html && echo "OK web" > web.txt
+          grep -q "BIBILEARN" page.html && grep -q 'const VERSION = "2.0"' page.html && echo "OK web (version 2.0 en ligne)" > web.txt
           n=$(curl -fsSL "${WEB}audio/list.json" | python3 -c "import json,sys;print(len(json.load(sys.stdin)))")
           echo "Voix natives intégrées : $n enregistrements" | tee -a web.txt
-          test "$n" -gt 1900
+          test "$n" -gt 3700
           for f in BIBILEARN-Windows-Setup.exe BIBILEARN-Windows-portable.exe BIBILEARN-Linux.AppImage BIBILEARN-Linux.deb BIBILEARN-Android.apk; do
             code=$(curl -sIL -o /dev/null -w "%{http_code}" "$REL/$f"); echo "$f -> HTTP $code" | tee -a web.txt
             test "$code" = "200"
@@ -48,6 +48,22 @@ jobs:
         if: always()
         with: { name: res-voix, path: voix.txt }
 
+  # Toutes les fonctions sur le site publié : leçons, translittération, examens, traducteur, 2 micros, hors ligne
+  fonctions:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install playwright && python -m playwright install --with-deps chromium
+      - run: python scripts/test_app.py "$WEB"
+      - if: always()
+        run: cp test-report.txt fonctions.txt || echo "ÉCHEC" > fonctions.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: res-fonctions, path: fonctions.txt }
+
   android:
     needs: web
     runs-on: ubuntu-latest
@@ -57,6 +73,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
       - run: curl -fsSL "$REL/BIBILEARN-Android.apk" -o app.apk && ls -la app.apk
+      - name: L'APK contient le micro (RECORD_AUDIO) et l'extension de reconnaissance vocale
+        run: |
+          AAPT=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)aapt
+          $AAPT dump permissions app.apk | tee perms.txt
+          grep -q RECORD_AUDIO perms.txt
+          unzip -p app.apk assets/capacitor.plugins.json | tee plugins.txt
+          grep -q SpeechRecognition plugins.txt && grep -q TextToSpeech plugins.txt
+          echo "OK micro Android : permission RECORD_AUDIO + extensions SpeechRecognition et TextToSpeech présentes" > mic.txt
       - name: Installer et lancer l'APK dans un téléphone Android virtuel
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -73,7 +97,7 @@ jobs:
             sleep 25
             adb exec-out screencap -p > android.png
             adb shell pidof io.github.bianca23cloud.bibilearn > android.txt
-            echo "OK android SANS INTERNET (mode avion, processus $(cat android.txt))" | tee android.txt
+            echo "OK android SANS INTERNET (mode avion, processus $(cat android.txt)) — $(cat mic.txt)" | tee android.txt
       - uses: actions/upload-artifact@v4
         with: { name: res-android, path: "android.*" }
 
@@ -90,6 +114,9 @@ jobs:
           for i in 1 2 3; do xcrun simctl openurl "$UDID" "$WEB" && break; echo "nouvel essai $i"; sleep 20; done
           sleep 40
           xcrun simctl io "$UDID" screenshot iphone.png
+          xcrun simctl openurl "$UDID" "${WEB}#translate" || true
+          sleep 20
+          xcrun simctl io "$UDID" screenshot iphone-traduire.png
           echo "OK iPhone : $NAME" | tee iphone.txt
       - uses: actions/upload-artifact@v4
         with: { name: res-iphone, path: "iphone.*" }
@@ -116,7 +143,7 @@ jobs:
         with: { name: res-windows, path: "windows.*" }
 
   rapport:
-    needs: [ web, prononciation, android, iphone, windows ]
+    needs: [ web, fonctions, prononciation, android, iphone, windows ]
     if: ${{ always() && needs.web.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -128,7 +155,7 @@ jobs:
           {
             echo "# Vérification automatique de BIBILEARN"
             echo; echo "Date : $(date -u '+%Y-%m-%d %H:%M UTC') — run ${{ github.run_id }}"; echo
-            for t in web voix windows android iphone; do echo "## $t"; echo '```'; cat $t.txt 2>/dev/null || echo "ÉCHEC"; echo '```'; [ -f $t.png ] && echo "![$t]($t.png)"; echo; done
+            for t in web fonctions voix windows android iphone; do echo "## $t"; echo '```'; cat $t.txt 2>/dev/null || echo "ÉCHEC"; echo '```'; [ -f $t.png ] && echo "![$t]($t.png)"; [ -f $t-traduire.png ] && echo "![$t traducteur]($t-traduire.png)"; echo; done
           } > README.md
           git init -q && git checkout -q -b verification
           git config user.name "github-actions[bot]" && git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

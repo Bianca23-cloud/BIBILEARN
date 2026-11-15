@@ -35,7 +35,7 @@ def fnv(s):
     return "%08x" % h
 
 def load_content():
-    js = "\n".join(open(os.path.join(ROOT, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js"))
+    js = "\n".join(open(os.path.join(ROOT, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js", "data3.js"))
     code = js + "\nprocess.stdout.write(JSON.stringify({LANG_ORDER, ITEMS, STORIES}));"
     return json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
 

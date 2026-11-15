@@ -3,7 +3,11 @@ import pathlib
 r = pathlib.Path(__file__).resolve().parent.parent
 s = r / "src"
 html = (s / "index.template.html").read_text(encoding="utf-8")
-js = "\n".join((s / f).read_text(encoding="utf-8") for f in ["data.js", "data2.js", "i18n.js", "i18n2.js", "app.js"])
+DATA = ["data.js", "data2.js", "data3.js", "i18n.js", "i18n2.js", "i18n3.js"]   # contenu + textes d'interface (globaux)
+data = "\n".join((s / f).read_text(encoding="utf-8") for f in DATA)
+mods = sorted((s / "js").glob("*.js"))                                          # code de l'appli, dans l'ordre 00, 10, 20…
+code = "\n".join(m.read_text(encoding="utf-8") for m in mods)
+js = data + "\n(function(){\n\"use strict\";\n" + code + "\n})();"
 audio = r / "www" / "audio"
 n = len(list(audio.rglob("*.mp3"))) if audio.exists() else 0   # voix natives enregistrées
 js = f"const AUDIO_N = {n};\n" + js

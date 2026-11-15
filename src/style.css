@@ -50,3 +50,15 @@ table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px so
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .pop{animation:pop .35s ease}@keyframes pop{0%{transform:scale(.9)}100%{transform:scale(1)}}
 nav.tabs button em{font-style:normal}
+/* ---- 2.0 : traducteur, conversation, examens ---- */
+.sr{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+textarea{font:inherit;width:100%;padding:10px 12px;border-radius:14px;border:2px solid var(--mauve);background:#fff;color:var(--ink);margin:10px 0 4px;resize:vertical;min-height:90px}
+.pairbar.inline{padding:0;border:none;background:none}
+.btn.big{flex:1;min-width:150px;min-height:64px;font-size:1.05rem}.btn.small{min-height:36px;padding:4px 10px}
+.bubble{border-radius:16px;padding:10px 12px;margin:10px 0;display:grid;gap:4px}
+.bubble.a{background:var(--lilac);margin-right:12%}.bubble.b{background:var(--mint);margin-left:12%}
+.bubble .tr{color:var(--indigo)}.bubble button{justify-self:start}
+.match{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#sug:empty{display:none}
+@media (max-width:420px){nav.tabs button{font-size:.66rem}nav.tabs button span{font-size:1.2rem}}
+[hidden]{display:none!important}

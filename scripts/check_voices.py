@@ -27,7 +27,7 @@ def fnv(s):
     return "%08x" % h
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-js = "\n".join(open(os.path.join(root, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js"))
+js = "\n".join(open(os.path.join(root, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js", "data3.js"))
 d = json.loads(subprocess.run(["node", "-e", js + "\nprocess.stdout.write(JSON.stringify({LANG_ORDER, STORIES}));"],
                               capture_output=True, text=True, check=True).stdout)
 model = WhisperModel("small", device="cpu", compute_type="int8")
