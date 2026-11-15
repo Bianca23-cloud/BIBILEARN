@@ -84,6 +84,26 @@ jobs:
           grep -q SpeechRecognition plugins.txt && grep -q TextToSpeech plugins.txt
           echo "OK micro Android : permission RECORD_AUDIO + extensions SpeechRecognition et TextToSpeech présentes" > mic.txt
       - name: Installer et lancer l'APK dans un téléphone Android virtuel
+        id: emu1
+        continue-on-error: true      # le téléchargement de l'émulateur échoue parfois chez GitHub
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r app.apk
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell cmd connectivity airplane-mode enable || true
+            adb shell monkey -p io.github.bianca23cloud.bibilearn -c android.intent.category.LAUNCHER 1
+            sleep 25
+            adb exec-out screencap -p > android.png
+            adb shell pidof io.github.bianca23cloud.bibilearn > android.txt
+            echo "OK android SANS INTERNET (mode avion, processus $(cat android.txt)) — $(cat mic.txt)" | tee android.txt
+      - name: Second essai (si le téléchargement de l'émulateur a échoué)
+        if: steps.emu1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
