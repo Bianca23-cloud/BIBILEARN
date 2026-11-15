@@ -28,8 +28,11 @@ def fnv(s):
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 js = "\n".join(open(os.path.join(root, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js", "data3.js"))
-d = json.loads(subprocess.run(["node", "-e", js + "\nprocess.stdout.write(JSON.stringify({LANG_ORDER, STORIES}));"],
-                              capture_output=True, text=True, check=True).stdout)
+# On écrit le code dans un fichier temporaire : le contenu est trop gros pour « node -e » (limite du système).
+_tmp = os.path.join(root, "scripts", "_contenu.tmp.js")
+open(_tmp, "w", encoding="utf-8").write(js + "\nprocess.stdout.write(JSON.stringify({LANG_ORDER, STORIES}));")
+d = json.loads(subprocess.run(["node", _tmp], capture_output=True, text=True, check=True).stdout)
+os.remove(_tmp)
 model = WhisperModel("small", device="cpu", compute_type="int8")
 ok, lines = True, []
 for c, lang in enumerate(d["LANG_ORDER"]):

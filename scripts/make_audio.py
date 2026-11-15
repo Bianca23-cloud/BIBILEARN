@@ -37,7 +37,14 @@ def fnv(s):
 def load_content():
     js = "\n".join(open(os.path.join(ROOT, "src", f), encoding="utf-8").read() for f in ("data.js", "data2.js", "data3.js"))
     code = js + "\nprocess.stdout.write(JSON.stringify({LANG_ORDER, ITEMS, STORIES}));"
-    return json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
+    # On écrit le code dans un fichier temporaire : le contenu est trop gros pour « node -e » (limite du système).
+    tmp = os.path.join(ROOT, "scripts", "_contenu.tmp.js")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(code)
+    try:
+        return json.loads(subprocess.run(["node", tmp], capture_output=True, text=True, check=True).stdout)
+    finally:
+        os.remove(tmp)
 
 def jobs():
     d = load_content()
